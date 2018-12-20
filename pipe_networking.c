@@ -15,7 +15,7 @@ int server_handshake(int *to_client) {
 	  exit(0);
 	}
   else {
-	  printf("wkp opened, recieving from client\n");
+	  printf("[server] wkp opened, recieving from client\n");
 	}
   int wkpd = open("wkp", O_RDONLY);
   char pid[HANDSHAKE_BUFFER_SIZE];
@@ -25,7 +25,7 @@ int server_handshake(int *to_client) {
 
 	*to_client = open(pid, O_WRONLY);
 	if(*to_client <= -1){
-	  printf("Error opening %d: %s\n", *to_client, strerror(errno));
+	  printf("[server] Error opening %d: %s\n", *to_client, strerror(errno));
 	  exit(0);
 	}
   else {
