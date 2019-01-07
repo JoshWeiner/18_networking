@@ -1,47 +1,54 @@
 #include "pipe_networking.h"
 
 
+int server_setup() {
+  printf("[server] establishing wkp\n");
+  mkfifo("server", 0600);
+  int from_client = open("server", O_RDONLY);
+  remove("server");
+  printf("[server] parent server initialized\n");
+  return from_client;
+}
+
+
+int server_connect(int from_client) {
+  char msg[HANDSHAKE_BUFFER_SIZE];
+
+  read(from_client, msg, sizeof(msg));
+  int to_client = open(msg, O_WRONLY);
+
+  write(to_client, msg, sizeof(msg));
+
+  read(from_client, msg, sizeof(msg));
+  printf("[server] handshake message from client: %s\n", msg);
+
+  return to_client;
+}
+
 /*=========================
   server_handshake
   args: int * to_client
-  Performs the client side pipe 3 way handshake.
+  Performs the server side pipe 3 way handshake.
   Sets *to_client to the file descriptor to the downstream pipe.
   returns the file descriptor for the upstream pipe.
   =========================*/
-int server_handshake(int *to_client) {
-  int make = mkfifo("wkp", 0644);
-	if(make < 0){
-	  printf("[server] Error opening Public Pipe: %s\n", strerror(errno));
-	  exit(0);
-	}
-  else {
-	  printf("[server] wkp opened, recieving from client\n");
-	}
-  int wkpd = open("wkp", O_RDONLY);
-  char pid[HANDSHAKE_BUFFER_SIZE];
-  read(wkpd, pid, sizeof(pid));
-  printf("[server] Message recieved from wkp: %s\n", pid);
-	remove("wkp");
+int server_handshake (int *to_client) {
 
-	*to_client = open(pid, O_WRONLY);
-	if(*to_client <= -1){
-	  printf("[server] Error opening %d: %s\n", *to_client, strerror(errno));
-	  exit(0);
-	}
-  else {
-	  printf("[server] Opened pipe to client\n");
-	}
-	write(*to_client, ACK , sizeof(ACK));
-	printf("[server] Sending message %s to client\n", ACK);
+  int from_client = server_setup();
+  char msg[HANDSHAKE_BUFFER_SIZE];
 
-  printf("[server] Receiving from client...\n" );
-  char client_buf[HANDSHAKE_BUFFER_SIZE];
-  read(wkpd, client_buf, sizeof(client_buf));
-  printf("[server] Message received: %s\n", client_buf);
+  read(from_client, msg, sizeof(msg));
 
-  return wkpd;
+  //connect to client, send message
+  *to_client = open(msg, O_WRONLY);
+  write(*to_client, msg, sizeof(msg));
+
+  //read for client
+  read(from_client, msg, sizeof(msg));
+  printf("[server] handshake received: %s\n", msg);
+
+  return from_client;
 }
-
 
 /*=========================
   client_handshake
@@ -51,26 +58,24 @@ int server_handshake(int *to_client) {
   returns the file descriptor for the downstream pipe.
   =========================*/
 int client_handshake(int *to_server) {
-  printf("[client] Creating private pipe \n");
-  char pid[HANDSHAKE_BUFFER_SIZE];
-  sprintf(pid, "%d", getpid());
-  mkfifo(pid, 0644);
-  printf("[client] pid: %d", getpid());
+  int from_server;
+  char msg[HANDSHAKE_BUFFER_SIZE];
 
-  *to_server = open("wkp", O_WRONLY);
-  write(*to_server, pid, sizeof(pid));
-	printf("[client] sending pid through wkp: %s\n", pid);
+  printf("[client]: handshake: connecting to wkp\n");
+  *to_server = open( "server", O_WRONLY, 0);
+  if ( *to_server == -1 )
+    exit(1);
+  sprintf(msg, "%d", getpid() );
+  mkfifo(msg, 0600);
 
-  int response = open(pid, O_RDONLY);
-  char buf[HANDSHAKE_BUFFER_SIZE];
-  read(response, buf, sizeof(buf));
-  printf("[client] Message received: %s\n", buf);
+  write(*to_server, msg, sizeof(msg));
+  from_server = open(msg, O_RDONLY, 0);
+  read(from_server, msg, sizeof(msg));
+  printf("[server]: pipe id [%s]\n", msg);
 
-  printf("[client] Removing private pipe...\n");
-  remove(pid);
+  remove(msg);
+  printf("[client] handshake: removed private pipe\n");
+  write(*to_server, ACK, sizeof(msg));
 
-  printf("[client] Writing %s to server...\n", ACK);
-  write(*to_server, ACK, sizeof(ACK));
-
-  return response;
+  return from_server;
 }
